@@ -89,3 +89,21 @@ That final copy step places these files directly in `dist/` so the deployed `ind
 - `style.css`
 
 If Vercel still shows 404s for these files, confirm the Vercel project root is this folder: `wsmt-social-final-clean`.
+
+## Supabase auth deployment checklist
+
+Vercel Environment Variables must use these exact names:
+
+- VITE_SUPABASE_URL
+- VITE_SUPABASE_ANON_KEY
+- VITE_STRIPE_PAYMENT_LINK
+- VITE_CHECKOUT_ENDPOINT
+
+After adding or changing Vercel environment variables, redeploy the project. The build step generates env-config.js from those variables, so an old deployment can still have blank Supabase values.
+
+The app logs a masked diagnostic in the browser console:
+
+- WSMT Supabase env
+- Supabase client initialized
+
+The anon key is masked in logs. If signup/login shows a fetch-related message, check that VITE_SUPABASE_URL is the full project URL, for example https://your-project.supabase.co, and that VITE_SUPABASE_ANON_KEY is the public anon JWT from Supabase Project Settings > API.

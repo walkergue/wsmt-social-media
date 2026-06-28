@@ -8,6 +8,33 @@ const CONFIG = {
 };
 
 function wsmtUuid(){return globalThis.crypto?.randomUUID ? globalThis.crypto.randomUUID() : "id-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2)}
+function maskSecret(value){if(!value)return "(missing)";return value.length <= 10 ? "***" : value.slice(0,6) + "..." + value.slice(-4) + " (" + value.length + " chars)"}
+function normalizeSupabaseUrl(value){const url=String(value || "").trim();return url.endsWith("/") ? url.slice(0,-1) : url}
+function getSupabaseConfigIssue(){
+  if(!CONFIG.SUPABASE_URL || !CONFIG.SUPABASE_ANON_KEY)return "Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY. Add both in Vercel Environment Variables and redeploy.";
+  try{const url=new URL(CONFIG.SUPABASE_URL);if(!["https:","http:"].includes(url.protocol))return "VITE_SUPABASE_URL must start with https://";}
+  catch{return "VITE_SUPABASE_URL is not a valid URL. It should look like https://your-project.supabase.co"}
+  if(!CONFIG.SUPABASE_ANON_KEY.includes("."))return "VITE_SUPABASE_ANON_KEY does not look like a Supabase anon JWT. Check the value in Vercel.";
+  return "";
+}
+function logEnvironmentDiagnostics(){
+  console.log("WSMT Supabase env",{
+    supabaseUrlPresent:Boolean(CONFIG.SUPABASE_URL),
+    supabaseUrl:CONFIG.SUPABASE_URL || "(missing)",
+    anonKeyPresent:Boolean(CONFIG.SUPABASE_ANON_KEY),
+    anonKey:maskSecret(CONFIG.SUPABASE_ANON_KEY),
+    paymentLinkPresent:Boolean(CONFIG.STRIPE_PAYMENT_LINK),
+    checkoutEndpointPresent:Boolean(CONFIG.CHECKOUT_ENDPOINT)
+  });
+}
+function friendlySupabaseError(error){
+  const message=error?.message || String(error || "Unknown Supabase error");
+  if(message === "Failed to fetch" || /fetch/i.test(message) && /failed/i.test(message)){
+    const issue=getSupabaseConfigIssue();
+    return issue || "Could not reach Supabase. Check that VITE_SUPABASE_URL is correct, the Supabase project is active, and the deployment was rebuilt after setting environment variables.";
+  }
+  return message;
+}
 
 const seed = {
   session: null,
@@ -43,6 +70,7 @@ const seed = {
 let state = loadLocalState();
 let supabaseClient = null;
 let currentSession = null;
+CONFIG.SUPABASE_URL = normalizeSupabaseUrl(CONFIG.SUPABASE_URL);
 const hasSupabaseConfig = Boolean(CONFIG.SUPABASE_URL && CONFIG.SUPABASE_ANON_KEY);
 const isSupabaseMode = () => Boolean(supabaseClient && currentSession?.user);
 const hasSupabaseClient = () => Boolean(supabaseClient);
@@ -63,17 +91,39 @@ function escapeHtml(value){return String(value ?? "").replace(/[&<>"]/g,char=>({
 function requireLogin(){if(!hasSupabaseClient()){toast("Supabase is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY, then restart the app.");showView("auth");return false}if(!currentUserId()){toast("Please sign up or log in first.");showView("auth");return false}return true}
 
 async function initSupabase(){
-  if(hasSupabaseConfig && window.supabase){
+  logEnvironmentDiagnostics();
+  const configIssue=getSupabaseConfigIssue();
+  if(configIssue){
+    supabaseClient=null;
+    $("storageStatus").textContent="Supabase not configured";
+    $("supabaseState").textContent=configIssue;
+    console.error("Supabase configuration issue:",configIssue);
+    return;
+  }
+  if(!window.supabase){
+    const message="Supabase library did not load. Check the script tag for @supabase/supabase-js and your network/ad-blocker settings.";
+    supabaseClient=null;
+    $("storageStatus").textContent="Supabase unavailable";
+    $("supabaseState").textContent=message;
+    console.error(message);
+    return;
+  }
+  try{
     supabaseClient=window.supabase.createClient(CONFIG.SUPABASE_URL,CONFIG.SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
-    const {data}=await supabaseClient.auth.getSession();
+    console.log("Supabase client initialized",{url:CONFIG.SUPABASE_URL,anonKey:maskSecret(CONFIG.SUPABASE_ANON_KEY)});
+    const {data,error}=await supabaseClient.auth.getSession();
+    if(error)throw error;
     currentSession=data.session;
-    supabaseClient.auth.onAuthStateChange(async (_event, session)=>{currentSession=session; await hydrateFromSupabase(); render();});
+    supabaseClient.auth.onAuthStateChange(async (_event, session)=>{try{currentSession=session; await hydrateFromSupabase(); render();}catch(error){console.error("Auth state refresh failed",error);toast(friendlySupabaseError(error));}});
     $("storageStatus").textContent=currentSession?"Supabase connected":"Supabase ready";
     $("supabaseState").textContent="Supabase is configured. Signup, login, session persistence, and database writes use your project.";
     await hydrateFromSupabase();
-  }else{
-    $("storageStatus").textContent="Local demo storage";
-    $("supabaseState").textContent="Supabase is not configured. Auth buttons require VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in .env or deployment settings.";
+  }catch(error){
+    const message=friendlySupabaseError(error);
+    supabaseClient=null;
+    $("storageStatus").textContent="Supabase connection failed";
+    $("supabaseState").textContent=message;
+    console.error("Supabase initialization failed",error);
   }
 }
 
@@ -154,12 +204,17 @@ document.querySelectorAll("[data-view-shortcut]").forEach(button=>button.addEven
 
 async function auth(intent,email,password){
   if(!hasSupabaseClient()){
-    throw new Error("Supabase is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY, then restart the app.");
+    throw new Error(getSupabaseConfigIssue() || "Supabase is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY, then restart the app.");
   }
-  const result=intent==="signup"
-    ? await supabaseClient.auth.signUp({email,password,options:{data:{display_name:email.split("@")[0]}}})
-    : await supabaseClient.auth.signInWithPassword({email,password});
-  if(result.error) throw result.error;
+  let result;
+  try{
+    result=intent==="signup"
+      ? await supabaseClient.auth.signUp({email,password,options:{data:{display_name:email.split("@")[0]}}})
+      : await supabaseClient.auth.signInWithPassword({email,password});
+  }catch(error){
+    throw new Error(friendlySupabaseError(error));
+  }
+  if(result.error) throw new Error(friendlySupabaseError(result.error));
   currentSession=result.data.session || currentSession;
   if(result.data.user) currentSession=currentSession || {user:result.data.user};
   await hydrateFromSupabase();
@@ -169,8 +224,10 @@ async function auth(intent,email,password){
 async function resetPassword(email){
   if(!email){toast("Enter your email first.");return}
   if(!hasSupabaseClient()){toast("Supabase is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY, then restart the app.");return}
-  const {error}=await supabaseClient.auth.resetPasswordForEmail(email,{redirectTo:window.location.origin});
-  if(error) throw error;
+  let result;
+  try{result=await supabaseClient.auth.resetPasswordForEmail(email,{redirectTo:window.location.origin});}
+  catch(error){throw new Error(friendlySupabaseError(error));}
+  if(result.error) throw new Error(friendlySupabaseError(result.error));
   toast("Password reset email sent.");
 }
 
@@ -187,7 +244,7 @@ function renderAdmin(){const subscribers=state.profile.membership==="active"?1:0
 
 on("authForm","submit",async event=>{event.preventDefault();const intent=event.submitter.value;logButtonClick(intent==="signup"?"Sign up":"Log in");$("authMessage").textContent="Working...";try{await auth(intent,$("authEmail").value,$("authPassword").value);const email=state.session?.email||$("authEmail").value;$("authMessage").textContent=intent==="signup"?"Signup submitted for "+email+". Check email confirmation settings if login is delayed.":"Logged in as "+email;toast(intent==="signup"?"Signup complete":"Logged in");showView("profile")}catch(error){$("authMessage").textContent=error.message;toast(error.message)}});
 on("resetPasswordButton","click",async()=>{logButtonClick("Reset password");try{await resetPassword($("authEmail").value)}catch(error){toast(error.message)}});
-on("signOutButton","click",async()=>{logButtonClick("Log out");try{if(!hasSupabaseClient()){toast("Supabase is not configured.");return}const {error}=await supabaseClient.auth.signOut();if(error)throw error;currentSession=null;state=loadLocalState();state.session=null;render();toast("Logged out")}catch(error){toast(error.message)}});
+on("signOutButton","click",async()=>{logButtonClick("Log out");try{if(!hasSupabaseClient()){toast("Supabase is not configured.");return}let result;try{result=await supabaseClient.auth.signOut();}catch(error){throw new Error(friendlySupabaseError(error));}if(result.error)throw new Error(friendlySupabaseError(result.error));currentSession=null;state=loadLocalState();state.session=null;render();toast("Logged out")}catch(error){toast(error.message)}});
 on("profileForm","submit",async event=>{event.preventDefault();if(isSupabaseMode()){const payload={id:currentUserId(),display_name:$("displayName").value,account_type:$("accountType").value,location:$("location").value,website:$("website").value,bio:$("bio").value};const {error}=await supabaseClient.from("profiles").upsert(payload);if(error)throw error;await loadProfile()}else{state.profile={...state.profile,displayName:$("displayName").value,accountType:$("accountType").value,location:$("location").value,website:$("website").value,bio:$("bio").value};saveLocalState()}render();toast("Profile saved")});
 on("composer","submit",async event=>{event.preventDefault();if(!requireLogin())return;const body=$("postText").value.trim();if(!body)return;if(isSupabaseMode()){const {error}=await supabaseClient.from("posts").insert({user_id:currentUserId(),content:body,post_type:"text"});if(error)throw error;await loadPosts()}else{state.posts.unshift({id:wsmtUuid(),author:currentName(),role:(state.profile.accountType||"Member")+" - Just now",body,likes:0,comments:0,shares:0,saved:false,liked:false});saveLocalState()}$("postText").value="";render();toast("Post published")});
 document.addEventListener("click",async event=>{const button=event.target.closest("button[data-action]");if(!button)return;if(!requireLogin())return;const id=button.dataset.id;const action=button.dataset.action;if(isSupabaseMode()){if(action==="like"){const post=state.posts.find(p=>p.id===id);if(post.liked)await supabaseClient.from("likes").delete().eq("post_id",id).eq("user_id",currentUserId());else await supabaseClient.from("likes").insert({post_id:id,user_id:currentUserId()});await loadPosts()}if(action==="save"){const post=state.posts.find(p=>p.id===id);if(post.saved)await supabaseClient.from("bookmarks").delete().eq("post_id",id).eq("user_id",currentUserId());else await supabaseClient.from("bookmarks").insert({post_id:id,user_id:currentUserId()});await loadPosts()}if(action==="comment"){const content=prompt("Add a comment");if(content)await supabaseClient.from("comments").insert({post_id:id,user_id:currentUserId(),content});await loadPosts()}if(action==="join-group"){const group=state.groups.find(g=>g.id===id);if(group.joined)await supabaseClient.from("group_members").delete().eq("group_id",id).eq("user_id",currentUserId());else await supabaseClient.from("group_members").insert({group_id:id,user_id:currentUserId()});await loadGroups()}}else{if(action==="like"){const post=state.posts.find(p=>p.id===id);post.liked=!post.liked;post.likes+=post.liked?1:-1}if(action==="comment"){const content=prompt("Add a comment");if(content)state.posts.find(p=>p.id===id).comments++}if(action==="share")state.posts.find(p=>p.id===id).shares++;if(action==="save"){const post=state.posts.find(p=>p.id===id);post.saved=!post.saved}if(action==="join-group"){const group=state.groups.find(g=>g.id===id);group.joined=!group.joined;group.members+=group.joined?1:-1}saveLocalState()}render()});
@@ -201,6 +258,7 @@ on("exportAdmin","click",()=>{logButtonClick("Export Report");const report=JSON.
 on("globalSearch","input",event=>{const term=event.target.value.toLowerCase();document.querySelectorAll(".post,.feature-card,.listing,.table-row").forEach(card=>{card.style.display=!term||card.textContent.toLowerCase().includes(term)?"":"none"})});
 
 console.log("App initialized");
+logEnvironmentDiagnostics();
 (async function boot(){try{await initSupabase();render()}catch(error){console.error("App initialization failed",error);toast(error.message||"App initialization failed")}})();
 }
 
