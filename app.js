@@ -7,7 +7,7 @@ const CONFIG = {
   CHECKOUT_ENDPOINT: ENV.VITE_CHECKOUT_ENDPOINT || ""
 };
 
-function wsmtUuid(){return globalThis.crypto?.randomUUID ? wsmtUuid() : "id-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2)}
+function wsmtUuid(){return globalThis.crypto?.randomUUID ? globalThis.crypto.randomUUID() : "id-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2)}
 
 const seed = {
   session: null,
