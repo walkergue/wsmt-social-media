@@ -1,3 +1,4 @@
+function bootWsmtApp(){
 const ENV = window.WSMT_ENV || {};
 const CONFIG = {
   SUPABASE_URL: ENV.VITE_SUPABASE_URL || "",
@@ -6,28 +7,30 @@ const CONFIG = {
   CHECKOUT_ENDPOINT: ENV.VITE_CHECKOUT_ENDPOINT || ""
 };
 
+function wsmtUuid(){return globalThis.crypto?.randomUUID ? wsmtUuid() : "id-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2)}
+
 const seed = {
   session: null,
   profile: { displayName: "Guest", accountType: "Creator", location: "", website: "", bio: "", membership: "inactive", isAdmin: false },
   posts: [
-    { id: crypto.randomUUID(), author: "Marisol Bennett", role: "Founder at GreenPath Supply - Sponsored", body: "Launching wholesale eco packaging for local restaurants this month. Members can book a supplier call and get marketplace placement.", likes: 28, comments: 7, shares: 4, saved: false, liked: false, accent: "accent" },
-    { id: crypto.randomUUID(), author: "Jordan Lee", role: "Creator community - Trending", body: "Our weekly creator sprint starts Friday. Bring one offer, one customer question, and one post draft.", likes: 64, comments: 18, shares: 11, saved: false, liked: false, accent: "gold" }
+    { id: wsmtUuid(), author: "Marisol Bennett", role: "Founder at GreenPath Supply - Sponsored", body: "Launching wholesale eco packaging for local restaurants this month. Members can book a supplier call and get marketplace placement.", likes: 28, comments: 7, shares: 4, saved: false, liked: false, accent: "accent" },
+    { id: wsmtUuid(), author: "Jordan Lee", role: "Creator community - Trending", body: "Our weekly creator sprint starts Friday. Bring one offer, one customer question, and one post draft.", likes: 64, comments: 18, shares: 11, saved: false, liked: false, accent: "gold" }
   ],
   groups: [
-    { id: crypto.randomUUID(), name: "Local Business Builders", description: "Promotions, vendor leads, and weekly accountability discussions.", members: 18400, joined: false },
-    { id: crypto.randomUUID(), name: "Investor Introductions", description: "Founder updates, pitch practice, and moderated deal conversations.", members: 6100, joined: false },
-    { id: crypto.randomUUID(), name: "Creator Growth Lab", description: "Content experiments, audience insights, and scheduled posting workflows.", members: 24700, joined: false }
+    { id: wsmtUuid(), name: "Local Business Builders", description: "Promotions, vendor leads, and weekly accountability discussions.", members: 18400, joined: false },
+    { id: wsmtUuid(), name: "Investor Introductions", description: "Founder updates, pitch practice, and moderated deal conversations.", members: 6100, joined: false },
+    { id: wsmtUuid(), name: "Creator Growth Lab", description: "Content experiments, audience insights, and scheduled posting workflows.", members: 24700, joined: false }
   ],
   listings: [
-    { id: crypto.randomUUID(), title: "Brand Launch Consulting", category: "Services", price: "$450", art: "consulting" },
-    { id: crypto.randomUUID(), title: "Shared Office Suite", category: "Real estate", price: "$1,200/mo", art: "office" },
-    { id: crypto.randomUUID(), title: "Creator Video Kit", category: "Products", price: "$690", art: "camera" },
-    { id: crypto.randomUUID(), title: "Sales Associate Role", category: "Jobs", price: "Full-time", art: "hiring" }
+    { id: wsmtUuid(), title: "Brand Launch Consulting", category: "Services", price: "$450", art: "consulting" },
+    { id: wsmtUuid(), title: "Shared Office Suite", category: "Real estate", price: "$1,200/mo", art: "office" },
+    { id: wsmtUuid(), title: "Creator Video Kit", category: "Products", price: "$690", art: "camera" },
+    { id: wsmtUuid(), title: "Sales Associate Role", category: "Jobs", price: "Full-time", art: "hiring" }
   ],
   ads: [
-    { id: crypto.randomUUID(), name: "Downtown Job Fair", type: "Event", status: "Active", result: "341 signups", budget: "$800" },
-    { id: crypto.randomUUID(), name: "Starter CRM Offer", type: "Service", status: "Active", result: "96 leads", budget: "$450" },
-    { id: crypto.randomUUID(), name: "Open House Weekend", type: "Real estate", status: "Review", result: "Pending", budget: "$300" }
+    { id: wsmtUuid(), name: "Downtown Job Fair", type: "Event", status: "Active", result: "341 signups", budget: "$800" },
+    { id: wsmtUuid(), name: "Starter CRM Offer", type: "Service", status: "Active", result: "96 leads", budget: "$450" },
+    { id: wsmtUuid(), name: "Open House Weekend", type: "Real estate", status: "Review", result: "Pending", budget: "$300" }
   ],
   businessPages: [],
   reports: [
@@ -45,9 +48,13 @@ const isSupabaseMode = () => Boolean(supabaseClient && currentSession?.user);
 const hasSupabaseClient = () => Boolean(supabaseClient);
 
 function storageKey(){return "wsmt-social-mvp"}
-function loadLocalState(){const saved=localStorage.getItem(storageKey());return saved?JSON.parse(saved):structuredClone(seed)}
+function loadLocalState(){try{const saved=localStorage.getItem(storageKey());return saved?JSON.parse(saved):structuredClone(seed)}catch(error){console.warn("Local storage reset",error);return structuredClone(seed)}}
 function saveLocalState(){if(!isSupabaseMode()) localStorage.setItem(storageKey(),JSON.stringify(state))}
 function $(id){return document.getElementById(id)}
+function on(id,eventName,handler){const element=$(id);if(!element){console.warn("Missing element #"+id);return}element.addEventListener(eventName,handler)}
+function logButtonClick(label){console.log("Button clicked:",label)}
+// Global button logger: confirms every visible button produces a console signal.
+document.addEventListener("click",event=>{const button=event.target.closest?.("button");if(button)console.log("Button clicked:",button.textContent.trim()||button.id||"button")},true)
 function toast(message){const el=$("toast");el.textContent=message;el.classList.add("show");setTimeout(()=>el.classList.remove("show"),2800)}
 function currentName(){return state.profile.displayName||state.session?.email?.split("@")[0]||"Guest"}
 function currentUserId(){return currentSession?.user?.id || state.session?.userId || null}
@@ -142,8 +149,8 @@ async function loadAds(){
 
 function countBy(rows,key){return rows.reduce((acc,row)=>{acc[row[key]]=(acc[row[key]]||0)+1;return acc},{})}
 function showView(viewName){document.querySelectorAll(".nav-item").forEach(nav=>nav.classList.toggle("active",nav.dataset.view===viewName));document.querySelectorAll(".view").forEach(view=>view.classList.toggle("active",view.id===viewName+"-view"));window.scrollTo({top:0,behavior:"smooth"})}
-document.querySelectorAll(".nav-item").forEach(item=>item.addEventListener("click",()=>showView(item.dataset.view)));
-document.querySelectorAll("[data-view-shortcut]").forEach(button=>button.addEventListener("click",()=>showView(button.dataset.viewShortcut)));
+document.querySelectorAll(".nav-item").forEach(item=>item.addEventListener("click",()=>{logButtonClick(item.textContent.trim());showView(item.dataset.view)}));
+document.querySelectorAll("[data-view-shortcut]").forEach(button=>button.addEventListener("click",()=>{logButtonClick(button.textContent.trim());showView(button.dataset.viewShortcut)}));
 
 async function auth(intent,email,password){
   if(!hasSupabaseClient()){
@@ -178,19 +185,27 @@ function renderAds(){const spend=state.ads.reduce((sum,ad)=>sum+Number(String(ad
 function renderBusiness(){const count=state.businessPages?.length||0;document.querySelector('#business-view .clean-list').innerHTML='<li><span>Business pages</span><strong>'+count+'</strong></li><li><span>Active ads</span><strong>'+state.ads.length+'</strong></li><li><span>Marketplace listings</span><strong>'+state.listings.length+'</strong></li>'}
 function renderAdmin(){const subscribers=state.profile.membership==="active"?1:0;$("adminMetrics").innerHTML=metric("Total users",isSupabaseMode()?"RLS visible":"Demo")+metric("Active subscribers",subscribers)+metric("MRR","$"+subscribers)+metric("Pending reports",state.reports.length);$("moderationQueue").innerHTML='<div class="table-row table-head"><span>Moderation queue</span><span>Priority</span><span>Owner</span><span>Status</span></div>'+state.reports.map(report=>'<div class="table-row"><span>'+escapeHtml(report.item)+'</span><span>'+escapeHtml(report.priority)+'</span><span>'+escapeHtml(report.owner)+'</span><span>'+escapeHtml(report.status)+'</span></div>').join("")}
 
-$("authForm").addEventListener("submit",async event=>{event.preventDefault();const intent=event.submitter.value;$("authMessage").textContent="Working...";try{await auth(intent,$("authEmail").value,$("authPassword").value);const email=state.session?.email||$("authEmail").value;$("authMessage").textContent=intent==="signup"?"Signup submitted for "+email+". Check email confirmation settings if login is delayed.":"Logged in as "+email;toast(intent==="signup"?"Signup complete":"Logged in");showView("profile")}catch(error){$("authMessage").textContent=error.message;toast(error.message)}});
-$("resetPasswordButton").addEventListener("click",async()=>{try{await resetPassword($("authEmail").value)}catch(error){toast(error.message)}});
-$("signOutButton").addEventListener("click",async()=>{try{if(!hasSupabaseClient()){toast("Supabase is not configured.");return}const {error}=await supabaseClient.auth.signOut();if(error)throw error;currentSession=null;state=loadLocalState();state.session=null;render();toast("Logged out")}catch(error){toast(error.message)}});
-$("profileForm").addEventListener("submit",async event=>{event.preventDefault();if(isSupabaseMode()){const payload={id:currentUserId(),display_name:$("displayName").value,account_type:$("accountType").value,location:$("location").value,website:$("website").value,bio:$("bio").value};const {error}=await supabaseClient.from("profiles").upsert(payload);if(error)throw error;await loadProfile()}else{state.profile={...state.profile,displayName:$("displayName").value,accountType:$("accountType").value,location:$("location").value,website:$("website").value,bio:$("bio").value};saveLocalState()}render();toast("Profile saved")});
-$("composer").addEventListener("submit",async event=>{event.preventDefault();if(!requireLogin())return;const body=$("postText").value.trim();if(!body)return;if(isSupabaseMode()){const {error}=await supabaseClient.from("posts").insert({user_id:currentUserId(),content:body,post_type:"text"});if(error)throw error;await loadPosts()}else{state.posts.unshift({id:crypto.randomUUID(),author:currentName(),role:(state.profile.accountType||"Member")+" - Just now",body,likes:0,comments:0,shares:0,saved:false,liked:false});saveLocalState()}$("postText").value="";render();toast("Post published")});
+on("authForm","submit",async event=>{event.preventDefault();const intent=event.submitter.value;logButtonClick(intent==="signup"?"Sign up":"Log in");$("authMessage").textContent="Working...";try{await auth(intent,$("authEmail").value,$("authPassword").value);const email=state.session?.email||$("authEmail").value;$("authMessage").textContent=intent==="signup"?"Signup submitted for "+email+". Check email confirmation settings if login is delayed.":"Logged in as "+email;toast(intent==="signup"?"Signup complete":"Logged in");showView("profile")}catch(error){$("authMessage").textContent=error.message;toast(error.message)}});
+on("resetPasswordButton","click",async()=>{logButtonClick("Reset password");try{await resetPassword($("authEmail").value)}catch(error){toast(error.message)}});
+on("signOutButton","click",async()=>{logButtonClick("Log out");try{if(!hasSupabaseClient()){toast("Supabase is not configured.");return}const {error}=await supabaseClient.auth.signOut();if(error)throw error;currentSession=null;state=loadLocalState();state.session=null;render();toast("Logged out")}catch(error){toast(error.message)}});
+on("profileForm","submit",async event=>{event.preventDefault();if(isSupabaseMode()){const payload={id:currentUserId(),display_name:$("displayName").value,account_type:$("accountType").value,location:$("location").value,website:$("website").value,bio:$("bio").value};const {error}=await supabaseClient.from("profiles").upsert(payload);if(error)throw error;await loadProfile()}else{state.profile={...state.profile,displayName:$("displayName").value,accountType:$("accountType").value,location:$("location").value,website:$("website").value,bio:$("bio").value};saveLocalState()}render();toast("Profile saved")});
+on("composer","submit",async event=>{event.preventDefault();if(!requireLogin())return;const body=$("postText").value.trim();if(!body)return;if(isSupabaseMode()){const {error}=await supabaseClient.from("posts").insert({user_id:currentUserId(),content:body,post_type:"text"});if(error)throw error;await loadPosts()}else{state.posts.unshift({id:wsmtUuid(),author:currentName(),role:(state.profile.accountType||"Member")+" - Just now",body,likes:0,comments:0,shares:0,saved:false,liked:false});saveLocalState()}$("postText").value="";render();toast("Post published")});
 document.addEventListener("click",async event=>{const button=event.target.closest("button[data-action]");if(!button)return;if(!requireLogin())return;const id=button.dataset.id;const action=button.dataset.action;if(isSupabaseMode()){if(action==="like"){const post=state.posts.find(p=>p.id===id);if(post.liked)await supabaseClient.from("likes").delete().eq("post_id",id).eq("user_id",currentUserId());else await supabaseClient.from("likes").insert({post_id:id,user_id:currentUserId()});await loadPosts()}if(action==="save"){const post=state.posts.find(p=>p.id===id);if(post.saved)await supabaseClient.from("bookmarks").delete().eq("post_id",id).eq("user_id",currentUserId());else await supabaseClient.from("bookmarks").insert({post_id:id,user_id:currentUserId()});await loadPosts()}if(action==="comment"){const content=prompt("Add a comment");if(content)await supabaseClient.from("comments").insert({post_id:id,user_id:currentUserId(),content});await loadPosts()}if(action==="join-group"){const group=state.groups.find(g=>g.id===id);if(group.joined)await supabaseClient.from("group_members").delete().eq("group_id",id).eq("user_id",currentUserId());else await supabaseClient.from("group_members").insert({group_id:id,user_id:currentUserId()});await loadGroups()}}else{if(action==="like"){const post=state.posts.find(p=>p.id===id);post.liked=!post.liked;post.likes+=post.liked?1:-1}if(action==="comment"){const content=prompt("Add a comment");if(content)state.posts.find(p=>p.id===id).comments++}if(action==="share")state.posts.find(p=>p.id===id).shares++;if(action==="save"){const post=state.posts.find(p=>p.id===id);post.saved=!post.saved}if(action==="join-group"){const group=state.groups.find(g=>g.id===id);group.joined=!group.joined;group.members+=group.joined?1:-1}saveLocalState()}render()});
-$("groupForm").addEventListener("submit",async event=>{event.preventDefault();if(!requireLogin())return;const name=$("groupName").value,description=$("groupDescription").value;if(isSupabaseMode()){const {data,error}=await supabaseClient.from("groups").insert({owner_id:currentUserId(),name,description,privacy:"public"}).select("id").single();if(error)throw error;await supabaseClient.from("group_members").insert({group_id:data.id,user_id:currentUserId(),role:"admin"});await loadGroups()}else{state.groups.unshift({id:crypto.randomUUID(),name,description,members:1,joined:true});saveLocalState()}event.target.reset();render();toast("Group created")});
-$("listingForm").addEventListener("submit",async event=>{event.preventDefault();if(!requireLogin())return;const listing={title:$("listingTitle").value,category:$("listingCategory").value,price:$("listingPrice").value};if(isSupabaseMode()){const {error}=await supabaseClient.from("marketplace_items").insert({...listing,seller_id:currentUserId(),status:"active"});if(error)throw error;await loadMarketplace()}else{state.listings.unshift({id:crypto.randomUUID(),...listing,art:"consulting"});saveLocalState()}event.target.reset();render();toast("Listing added")});
-$("businessForm").addEventListener("submit",async event=>{event.preventDefault();if(!requireLogin())return;const page={name:$("businessName").value,category:$("businessCategory").value,description:"Created from WSMT dashboard"};if(isSupabaseMode()){const {error}=await supabaseClient.from("business_pages").insert({...page,owner_id:currentUserId()});if(error)throw error;await loadBusinessPages()}else{state.businessPages.unshift({id:crypto.randomUUID(),...page});saveLocalState()}event.target.reset();render();toast("Business page saved")});
-$("adForm").addEventListener("submit",async event=>{event.preventDefault();if(!requireLogin())return;const ad={name:$("adName").value,ad_type:$("adType").value,budget:$("adBudget").value,status:"review",result:"Pending"};if(isSupabaseMode()){const {error}=await supabaseClient.from("advertisements").insert({...ad,owner_id:currentUserId()});if(error)throw error;await loadAds()}else{state.ads.unshift({id:crypto.randomUUID(),name:ad.name,type:ad.ad_type,budget:ad.budget,status:"Review",result:"Pending"});saveLocalState()}event.target.reset();render();toast("Ad submitted for review")});
+on("groupForm","submit",async event=>{event.preventDefault();if(!requireLogin())return;const name=$("groupName").value,description=$("groupDescription").value;if(isSupabaseMode()){const {data,error}=await supabaseClient.from("groups").insert({owner_id:currentUserId(),name,description,privacy:"public"}).select("id").single();if(error)throw error;await supabaseClient.from("group_members").insert({group_id:data.id,user_id:currentUserId(),role:"admin"});await loadGroups()}else{state.groups.unshift({id:wsmtUuid(),name,description,members:1,joined:true});saveLocalState()}event.target.reset();render();toast("Group created")});
+on("listingForm","submit",async event=>{event.preventDefault();if(!requireLogin())return;const listing={title:$("listingTitle").value,category:$("listingCategory").value,price:$("listingPrice").value};if(isSupabaseMode()){const {error}=await supabaseClient.from("marketplace_items").insert({...listing,seller_id:currentUserId(),status:"active"});if(error)throw error;await loadMarketplace()}else{state.listings.unshift({id:wsmtUuid(),...listing,art:"consulting"});saveLocalState()}event.target.reset();render();toast("Listing added")});
+on("businessForm","submit",async event=>{event.preventDefault();if(!requireLogin())return;const page={name:$("businessName").value,category:$("businessCategory").value,description:"Created from WSMT dashboard"};if(isSupabaseMode()){const {error}=await supabaseClient.from("business_pages").insert({...page,owner_id:currentUserId()});if(error)throw error;await loadBusinessPages()}else{state.businessPages.unshift({id:wsmtUuid(),...page});saveLocalState()}event.target.reset();render();toast("Business page saved")});
+on("adForm","submit",async event=>{event.preventDefault();if(!requireLogin())return;const ad={name:$("adName").value,ad_type:$("adType").value,budget:$("adBudget").value,status:"review",result:"Pending"};if(isSupabaseMode()){const {error}=await supabaseClient.from("advertisements").insert({...ad,owner_id:currentUserId()});if(error)throw error;await loadAds()}else{state.ads.unshift({id:wsmtUuid(),name:ad.name,type:ad.ad_type,budget:ad.budget,status:"Review",result:"Pending"});saveLocalState()}event.target.reset();render();toast("Ad submitted for review")});
 async function startCheckout(){if(CONFIG.CHECKOUT_ENDPOINT){const response=await fetch(CONFIG.CHECKOUT_ENDPOINT,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({price:"wsmt_1_month",userId:currentUserId()||"guest"})});const data=await response.json();if(data.url)window.location.href=data.url;return}if(CONFIG.STRIPE_PAYMENT_LINK){window.location.href=CONFIG.STRIPE_PAYMENT_LINK;return}if(isSupabaseMode()){await supabaseClient.from("subscriptions").upsert({user_id:currentUserId(),status:"active"},{onConflict:"user_id"});await loadSubscription()}else{state.profile.membership="active";saveLocalState()}render();toast("Demo membership activated. Add Stripe checkout for live billing.")}
-["stripeCheckoutButton","stripeCheckoutHero","stripeCheckoutRail"].forEach(id=>$(id).addEventListener("click",startCheckout));
-$("exportAdmin").addEventListener("click",()=>{const report=JSON.stringify({reports:state.reports,ads:state.ads,groups:state.groups,listings:state.listings},null,2);const blob=new Blob([report],{type:"application/json"});const link=document.createElement("a");link.href=URL.createObjectURL(blob);link.download="wsmt-admin-report.json";link.click();URL.revokeObjectURL(link.href)});
-$("globalSearch").addEventListener("input",event=>{const term=event.target.value.toLowerCase();document.querySelectorAll(".post,.feature-card,.listing,.table-row").forEach(card=>{card.style.display=!term||card.textContent.toLowerCase().includes(term)?"":"none"})});
+["stripeCheckoutButton","stripeCheckoutHero","stripeCheckoutRail"].forEach(id=>on(id,"click",event=>{logButtonClick(event.currentTarget.textContent.trim());startCheckout()}));
+on("exportAdmin","click",()=>{logButtonClick("Export Report");const report=JSON.stringify({reports:state.reports,ads:state.ads,groups:state.groups,listings:state.listings},null,2);const blob=new Blob([report],{type:"application/json"});const link=document.createElement("a");link.href=URL.createObjectURL(blob);link.download="wsmt-admin-report.json";link.click();URL.revokeObjectURL(link.href)});
+on("globalSearch","input",event=>{const term=event.target.value.toLowerCase();document.querySelectorAll(".post,.feature-card,.listing,.table-row").forEach(card=>{card.style.display=!term||card.textContent.toLowerCase().includes(term)?"":"none"})});
 
-(async function boot(){await initSupabase();render();})();
+console.log("App initialized");
+(async function boot(){try{await initSupabase();render()}catch(error){console.error("App initialization failed",error);toast(error.message||"App initialization failed")}})();
+}
+
+if(document.readyState === "loading"){
+  document.addEventListener("DOMContentLoaded", bootWsmtApp);
+}else{
+  bootWsmtApp();
+}
