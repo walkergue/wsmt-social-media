@@ -77,3 +77,15 @@ If both Stripe variables are blank, the app uses local demo membership activatio
 - Feed, composer, likes, comments, shares, bookmarks, and saved posts
 - Groups, marketplace listings, ads dashboard, business dashboard, and admin dashboard
 - Stripe-ready $1/month recurring membership checkout
+
+## 404 fix for Vercel/Netlify assets
+
+The production build runs `node scripts/write-env.mjs && vite build && node scripts/copy-static.mjs`.
+
+That final copy step places these files directly in `dist/` so the deployed `index.html` can load them without 404 errors:
+
+- `app.js`
+- `env-config.js`
+- `style.css`
+
+If Vercel still shows 404s for these files, confirm the Vercel project root is this folder: `wsmt-social-final-clean`.
